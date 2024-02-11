@@ -2,7 +2,18 @@
 
 import UIKit
 
-class CellModel {
+
+
+
+class CellModel: Hashable {
+    public func hash(into hasher: inout Hasher) {
+         hasher.combine(ObjectIdentifier(self))
+    }
+
+    static func == (lhs: CellModel, rhs: CellModel) -> Bool {
+        lhs.text == rhs.text && lhs.isSelected == rhs.isSelected
+    }
+
     let text: String
     private(set) var isSelected: Bool
 
@@ -16,124 +27,54 @@ class CellModel {
     }
 }
 
-//class Model {
-//    private(set) var cells: [CellModel]
-//
-//    init() {
-//
-////        let cellsModels = Array
-//        self.cells = cells
-//    }
-//
-//    func select(row: Int) {
-//        cells[row].changeSelection(true)
-//        let cell = cells.remove(at: row)
-//        cells.insert(cell, at: 0)
-//    }
-//
-//    func deselect(row: Int) {
-//        cells[row].changeSelection(false)
-//    }
-//
-//    func shuffle() {
-//        cells.shuffle()
-//    }
-//}
+class Model {
+    private(set) var cells: [CellModel]
 
-class ViewController: UIViewController {
-    private let table: UITableView = UITableView(frame: .zero, style: .insetGrouped)
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        view.backgroundColor = .white
-        setupNavigationController()
-        setupTable()
-    }
-
-    private func setupNavigationController() {
-        title = "Task 4"
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: "Shuffle", style: .plain, target: self, action: #selector(shuffle)
-        )
-    }
-
-    @objc
-    private func shuffle() {
-        for index in 0..<table.numberOfRows(inSection: 0) {
-            table.moveRow(at: IndexPath(item: index, section: 0), to: IndexPath(item: Int.random(in: 0..<table.numberOfRows(inSection: 0)), section: 0))
+    init() {
+        self.cells = Array(1...30).map {
+            CellModel(text: String($0), isSelected: false)
         }
     }
 
-    private func setupTable() {
-        view.addSubview(table)
-        table.translatesAutoresizingMaskIntoConstraints = false
-        table.leadingAnchor.constraint(equalTo: view.leadingAnchor).isActive = true
-        table.trailingAnchor.constraint(equalTo: view.trailingAnchor).isActive = true
-        table.topAnchor.constraint(equalTo: view.topAnchor).isActive = true
-        table.bottomAnchor.constraint(equalTo: view.bottomAnchor).isActive = true
-
-        table.delegate = self
-        table.dataSource = self
-        table.allowsMultipleSelection = true
-        table.register(Cell.self, forCellReuseIdentifier: Cell.describing)
+    func select(row: Int) {
+        cells[row].changeSelection(true)
+        let cell = cells.remove(at: row)
+        cells.insert(cell, at: 0)
     }
 
+    func deselect(row: Int) {
+        cells[row].changeSelection(false)
+    }
 
+    func shuffle() {
+        cells.shuffle()
+    }
 }
-
 
 extension ViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        selectItem(row: indexPath.row)
         guard let cell = tableView.cellForRow(at: indexPath) as? Cell else {
-            assertionFailure("Can't dequeue as Cell")
-            return
-        }
-        cell.setSelection(isSelected: true)
-        tableView.moveRow(at: indexPath, to: IndexPath(item: 0, section: 0))
+                    assertionFailure("Can't dequeue as Cell")
+                    return
+                }
+                cell.setSelection(isSelected: true)
     }
 
     func tableView(_ tableView: UITableView, didDeselectRowAt indexPath: IndexPath) {
-        guard let cell = tableView.cellForRow(at: indexPath) as? Cell else {
-            assertionFailure("Can't dequeue as Cell")
-            return
-        }
-        cell.setSelection(isSelected: false)
+        deselectItem(row: indexPath.row)
+        tableView.reloadRows(at: [indexPath], with: .automatic)
+//        guard let cell = tableView.cellForRow(at: indexPath) as? Cell else {
+//                    assertionFailure("Can't dequeue as Cell")
+//                    return
+//                }
+//                cell.setSelection(isSelected: false)
     }
-}
-
-extension ViewController: UITableViewDataSource {
-//tableviewselect
-
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        30
-    }
-    
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        guard let cell = tableView.dequeueReusableCell(withIdentifier: Cell.describing, for: indexPath) as? Cell else {
-            assertionFailure("Can't dequeue as Cell")
-            return UITableViewCell()
-        }
-        cell.setup(indexPath: indexPath)
-        return cell
-    }
-    
-
 }
 
 class Cell: UITableViewCell {
     private let label: UILabel = UILabel()
     private let selectedIcon: UIImageView = UIImageView(image: UIImage(systemName: "checkmark"))
-
-    private var firstIndexPath: IndexPath? {
-        didSet {
-            guard let firstIndexPath else {
-                assertionFailure("Don't set firstIndexPath to nil")
-                return
-            }
-            label.text = String(firstIndexPath.row)
-        }
-    }
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -162,11 +103,10 @@ class Cell: UITableViewCell {
         label.centerYAnchor.constraint(equalTo: centerYAnchor).isActive = true
     }
 
-    func setup(indexPath: IndexPath) {
-        if firstIndexPath == nil {
-            firstIndexPath = indexPath
-            setSelection(isSelected: isSelected)
-        }
+    func setup(model: CellModel) {
+        label.text = String(model.text)
+        setSelection(isSelected: model.isSelected)
+
     }
 
     func setSelection(isSelected: Bool) {
@@ -177,5 +117,91 @@ class Cell: UITableViewCell {
 extension UIView {
     internal class var describing: String {
         return String(describing: self)
+    }
+}
+
+
+
+
+import UIKit
+
+class ViewController: UIViewController {
+    enum Section {
+        case main
+    }
+
+    private let model = Model()
+
+    private let table: UITableView = UITableView(frame: .zero, style: .insetGrouped)
+
+    private var dataSource: UITableViewDiffableDataSource<ViewController.Section, CellModel>!
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        configureNavBar()
+        configureTableView()
+        configureDataSource()
+    }
+
+    private func configureNavBar() {
+        title = "Task 4"
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Shuffle", style: .plain, target: self, action: #selector(shuffle))
+    }
+
+    @objc
+    private func shuffle() {
+        model.shuffle()
+        makeSnapshotAndApply(animated: true)
+    }
+
+    @objc
+    private func selectItem(row: Int) {
+        model.select(row: row)
+        makeSnapshotAndApply(animated: true)
+    }
+
+    @objc
+    private func deselectItem(row: Int) {
+        model.deselect(row: row)
+        makeSnapshotAndApply(animated: true)
+    }
+
+    private func configureTableView() {
+        view.addSubview(table)
+        table.translatesAutoresizingMaskIntoConstraints = false
+        table.leadingAnchor.constraint(equalTo: view.leadingAnchor).isActive = true
+        table.trailingAnchor.constraint(equalTo: view.trailingAnchor).isActive = true
+        table.topAnchor.constraint(equalTo: view.topAnchor).isActive = true
+        table.bottomAnchor.constraint(equalTo: view.bottomAnchor).isActive = true
+
+                    table.delegate = self
+        //            table.dataSource = self
+        table.allowsMultipleSelection = true
+        table.register(Cell.self, forCellReuseIdentifier: Cell.describing)
+    }
+
+    private func makeSnapshotAndApply(animated: Bool) {
+        var snapshot = NSDiffableDataSourceSnapshot<ViewController.Section, CellModel>()
+        snapshot.appendSections([.main])
+        snapshot.appendItems(model.cells)
+        dataSource.apply(snapshot, animatingDifferences: true)
+    }
+
+    private func configureDataSource() {
+        dataSource = UITableViewDiffableDataSource<ViewController.Section, CellModel>(
+            tableView: table,
+            cellProvider: { (tableView, indexPath, cellModel) -> UITableViewCell? in
+                guard let cell = tableView.dequeueReusableCell(withIdentifier: Cell.describing, for: indexPath) as? Cell else {
+                    assertionFailure("Can't dequeue as Cell")
+                    return UITableViewCell()
+                }
+                cell.setup(model: cellModel)
+                return cell
+            }
+        )
+
+        dataSource.defaultRowAnimation = .automatic
+
+        makeSnapshotAndApply(animated: false)
     }
 }
